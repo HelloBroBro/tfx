@@ -260,6 +260,54 @@ class PlaceholderUtilsTest(parameterized.TestCase, tf.test.TestCase):
         placeholder_utils.resolve_placeholder_expression(
             pb, self._resolution_context), "/tmp/Split-train/1")
 
+  def testJoinPath(self):
+    placeholder_expression = text_format.Parse(
+        """
+        operator {
+          join_path_op {
+            args {
+              operator {
+                proto_op {
+                  expression {
+                    placeholder {
+                      type: EXEC_INVOCATION
+                    }
+                  }
+                  proto_field_path: ".stateful_working_dir"
+                }
+              }
+            }
+            args {
+              value {
+                string_value: "foo"
+              }
+            }
+            args {
+              operator {
+                proto_op {
+                  expression {
+                    placeholder {
+                      type: EXEC_INVOCATION
+                    }
+                  }
+                  proto_field_path: ".pipeline_info"
+                  proto_field_path: ".id"
+                }
+              }
+            }
+          }
+        }
+        """,
+        placeholder_pb2.PlaceholderExpression(),
+    )
+    resolved_str = placeholder_utils.resolve_placeholder_expression(
+        placeholder_expression, self._resolution_context
+    )
+    self.assertEqual(
+        resolved_str,
+        "test_stateful_working_dir/foo/test_pipeline_id",
+    )
+
   def testArtifactProperty(self):
     placeholder_expression = """
       operator {
@@ -1206,6 +1254,186 @@ class PlaceholderUtilsTest(parameterized.TestCase, tf.test.TestCase):
         "exec_property(\"serving_spec\").tensorflow_serving.serialize(TEXT_FORMAT)"
     )
 
+  def testDebugJoinPath(self):
+    placeholder_expression = text_format.Parse(
+        """
+        operator {
+          join_path_op {
+            args {
+              operator {
+                proto_op {
+                  expression {
+                    placeholder {
+                      type: EXEC_INVOCATION
+                    }
+                  }
+                  proto_field_path: ".stateful_working_dir"
+                }
+              }
+            }
+            args {
+              value {
+                string_value: "foo"
+              }
+            }
+            args {
+              operator {
+                proto_op {
+                  expression {
+                    placeholder {
+                      type: EXEC_INVOCATION
+                    }
+                  }
+                  proto_field_path: ".pipeline_info"
+                  proto_field_path: ".id"
+                }
+              }
+            }
+          }
+        }
+        """,
+        placeholder_pb2.PlaceholderExpression(),
+    )
+    self.assertEqual(
+        placeholder_utils.debug_str(placeholder_expression),
+        'join_path(execution_invocation().stateful_working_dir, "foo", '
+        "execution_invocation().pipeline_info.id)",
+    )
+
+  def testDebugMakeDictPlaceholder(self):
+    pb = text_format.Parse(
+        """
+      operator {
+        make_dict_op {
+          entries {
+            key {
+              value {
+                string_value: "key_1"
+              }
+            }
+            value {
+              operator {
+                artifact_value_op {
+                  expression {
+                    operator {
+                      index_op {
+                        expression {
+                          placeholder {
+                            type: INPUT_ARTIFACT
+                            key: "channel_1"
+                          }
+                        }
+                        index: 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          entries {
+            key {
+              value {
+                string_value: "key_2"
+              }
+            }
+            value {
+              operator {
+                artifact_value_op {
+                  expression {
+                    operator {
+                      index_op {
+                        expression {
+                          placeholder {
+                            type: INPUT_ARTIFACT
+                            key: "channel_2"
+                          }
+                        }
+                        index: 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    """,
+        placeholder_pb2.PlaceholderExpression(),
+    )
+    self.assertEqual(
+        placeholder_utils.debug_str(pb),
+        "make_dict({"
+        '"key_1": input("channel_1")[0].value, '
+        '"key_2": input("channel_2")[0].value})',
+    )
+
+  def testDebugMakeProtoPlaceholder(self):
+    pb = text_format.Parse(
+        """
+      operator {
+        make_proto_op {
+          base {
+            [type.googleapis.com/tfx.orchestration.ExecutionInvocation] {}
+          }
+          fields {
+            key: "field_1"
+            value {
+              operator {
+                artifact_value_op {
+                  expression {
+                    operator {
+                      index_op {
+                        expression {
+                          placeholder {
+                            type: INPUT_ARTIFACT
+                            key: "channel_1"
+                          }
+                        }
+                        index: 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          fields {
+            key: "field_2"
+            value {
+              operator {
+                artifact_value_op {
+                  expression {
+                    operator {
+                      index_op {
+                        expression {
+                          placeholder {
+                            type: INPUT_ARTIFACT
+                            key: "channel_2"
+                          }
+                        }
+                        index: 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    """,
+        placeholder_pb2.PlaceholderExpression(),
+    )
+    self.assertEqual(
+        placeholder_utils.debug_str(pb),
+        "MakeProto("
+        'type_url: "type.googleapis.com/tfx.orchestration.ExecutionInvocation",'
+        ' field_1=input("channel_1")[0].value,'
+        ' field_2=input("channel_2")[0].value)',
+    )
+
   def testGetAllTypesInPlaceholderExpressionFails(self):
     self.assertRaises(
         ValueError,
@@ -1816,7 +2044,7 @@ class PredicateResolutionTest(parameterized.TestCase, tf.test.TestCase):
         placeholder_utils.resolve_placeholder_expression(
             nested_pb_2, resolution_context), True)
 
-  def testDebugPlaceholder(self):
+  def testDebugPredicatePlaceholder(self):
     pb = text_format.Parse(
         """
       operator {
@@ -2035,140 +2263,6 @@ class PredicateResolutionTest(parameterized.TestCase, tf.test.TestCase):
     self.assertEqual(
         re.sub(r"\s+", "", actual_debug_str),
         re.sub(r"\s+", "", expected_debug_str_pretty))
-
-  def testDebugMakeDictPlaceholder(self):
-    pb = text_format.Parse(
-        """
-      operator {
-        make_dict_op {
-          entries {
-            key {
-              value {
-                string_value: "key_1"
-              }
-            }
-            value {
-              operator {
-                artifact_value_op {
-                  expression {
-                    operator {
-                      index_op {
-                        expression {
-                          placeholder {
-                            type: INPUT_ARTIFACT
-                            key: "channel_1"
-                          }
-                        }
-                        index: 0
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          entries {
-            key {
-              value {
-                string_value: "key_2"
-              }
-            }
-            value {
-              operator {
-                artifact_value_op {
-                  expression {
-                    operator {
-                      index_op {
-                        expression {
-                          placeholder {
-                            type: INPUT_ARTIFACT
-                            key: "channel_2"
-                          }
-                        }
-                        index: 0
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    """,
-        placeholder_pb2.PlaceholderExpression(),
-    )
-    self.assertEqual(
-        placeholder_utils.debug_str(pb),
-        "make_dict({"
-        '"key_1": input("channel_1")[0].value, '
-        '"key_2": input("channel_2")[0].value})',
-    )
-
-  def testDebugMakeProtoPlaceholder(self):
-    pb = text_format.Parse(
-        """
-      operator {
-        make_proto_op {
-          base {
-            [type.googleapis.com/tfx.orchestration.ExecutionInvocation] {}
-          }
-          fields {
-            key: "field_1"
-            value {
-              operator {
-                artifact_value_op {
-                  expression {
-                    operator {
-                      index_op {
-                        expression {
-                          placeholder {
-                            type: INPUT_ARTIFACT
-                            key: "channel_1"
-                          }
-                        }
-                        index: 0
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-          fields {
-            key: "field_2"
-            value {
-              operator {
-                artifact_value_op {
-                  expression {
-                    operator {
-                      index_op {
-                        expression {
-                          placeholder {
-                            type: INPUT_ARTIFACT
-                            key: "channel_2"
-                          }
-                        }
-                        index: 0
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    """,
-        placeholder_pb2.PlaceholderExpression(),
-    )
-    self.assertEqual(
-        placeholder_utils.debug_str(pb),
-        "MakeProto("
-        'type_url: "type.googleapis.com/tfx.orchestration.ExecutionInvocation",'
-        ' field_1=input("channel_1")[0].value,'
-        ' field_2=input("channel_2")[0].value)',
-    )
 
 
 if __name__ == "__main__":
