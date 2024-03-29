@@ -1,6 +1,6 @@
 load("//tfx:tfx.bzl", "tfx_py_proto_library")
 
-# Copyright 2020 Google LLC
+# Copyright 2024 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,14 +20,6 @@ licenses(["notice"])  # Apache 2.0
 exports_files(["LICENSE"])
 
 tfx_py_proto_library(
-    name = "foo_proto_py_pb2",
-    srcs = ["foo.proto"],
-    deps = [
-        ":bar_proto_py_pb2",
-    ],
-)
-
-tfx_py_proto_library(
-    name = "bar_proto_py_pb2",
-    srcs = ["bar.proto"],
+    name = "annotations_test_proto_py_pb2",
+    srcs = ["annotations_test_proto.proto"],
 )
