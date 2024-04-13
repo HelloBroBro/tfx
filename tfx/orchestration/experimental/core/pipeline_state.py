@@ -609,7 +609,7 @@ class PipelineState:
           ),
       )
 
-    if env.get_env().concurrent_pipeline_runs_enabled():
+    if env.get_env().concurrent_pipeline_runs_enabled(pipeline):
       # If concurrent runs are enabled, we should still prohibit interference
       # with any active async pipelines so disallow starting a sync pipeline.
       if active_async_pipeline_executions:
@@ -949,6 +949,7 @@ class PipelineState:
           message=('Updated pipeline should have the same structure as the '
                    'original.'))
 
+    env.get_env().prepare_orchestrator_for_pipeline_run(updated_pipeline)
     data_types_utils.set_metadata_value(
         self._execution.custom_properties[_UPDATED_PIPELINE_IR],
         _PipelineIRCodec.get().encode(updated_pipeline))
